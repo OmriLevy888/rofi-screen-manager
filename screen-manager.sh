@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Author: Omri Levy
+# Author: Omri Levy Shahar
 # TODO: add support for a directory of premade presets (.screenlayout)
 
 refresh_wm() {
