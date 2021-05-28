@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Author: Omri Levy Shahar
-# TODO: add support for a directory of premade presets (.screenlayout)
+
+LAYOUT_DIR="$HOME/.screenlayout/"
 
 refresh_wm() {
   herbstclient detect_monitors
@@ -14,7 +15,7 @@ set_resolution() {
   monitor="$1"
   modes="$(xrandr | tr '\n' ' ' | grep -hoe "$monitor.\+" | grep -hoPe "\d+x\d+ ")"
   chosen_mode=$(echo -e "Auto\n${modes[@]}\nBack\nExit" | menu_cmd)
-  if [ "$chosen_mode" == "Exit" ]; then
+  if [ "$chosen_mode" == "Exit" ] || [ -z "$chosen_mode" ]; then 
     exit
   elif [ "$chosen_mode" != "Back" ]; then
     if [ "$chosen_mode" == "Auto" ]; then
@@ -33,7 +34,7 @@ set_position() {
   positions+="\nRight of"
   positions+="\nBack"
   chosen_position=$(echo -e "${positions[@]}" | menu_cmd)
-  if [ "$chosen_position" == "Exit" ]; then
+  if [ "$chosen_position" == "Exit" ] || [ -z "$chosen_position" ]; then
     exit
   elif [ "$chosen_mode" != "Back" ]; then
     while true; do
@@ -43,7 +44,7 @@ set_position() {
       fi
     done
 
-    if [ "$relative_monitor" == "Exit" ]; then
+    if [ "$relative_monitor" == "Exit" ] || [ -z "$relative_monitor" ]; then
       exit
     elif [ "$relative_monitor" == "Back" ]; then
       set_position "$chosen_monitor"
@@ -67,6 +68,65 @@ set_position() {
   fi
 }
 
+layouts_menu() {
+  layouts_menu="Set layout"
+  layouts_menu+="\nCreate new layout"
+  layouts_menu+="\nDelete layout"
+  layouts_menu+="\nSave current state as layout"
+  layouts_menu+="\nBack"
+  layouts_menu+="\nExit"
+  chosen_layout_menu=$(echo -e "${layouts_menu[@]}" | menu_cmd)
+
+  layouts=$(ls "$LAYOUT_DIR")
+
+  if [ "$chosen_layout_menu" == "Exit" ] || [ -z "$chosen_layout_menu" ]; then
+    exit
+  elif [ "$chosen_layout_menu" != "Back" ]; then
+    case "$chosen_layout_menu" in
+      "Set layout")
+        chosen_layout="$(echo -e "$layouts\nBack\nExit" | menu_cmd)"
+        if [ "$chosen_layout" == "Exit" ] || [ -z "$chosen_layout" ]; then
+          exit
+        elif [ "$chosen_layout" == "Back" ]; then
+          layouts_menu
+        else
+          source "$LAYOUT_DIR/$chosen_layout"
+        fi
+        ;;
+      "Create new layout")
+        while true; do
+          layout_name="$(echo -e "Enter layout name\nBack\nExit" | menu_cmd)"
+          if [ "$layout_name" == "Exit" ] || [ -z "$layout_name" ]; then
+            exit
+          elif [ "$layout_name" == "Back" ]; then
+            layout_name
+          elif [ "$layout_name" != "Enter layout name" ]; then
+            break
+          fi
+        done
+
+        echo "Creating layout"
+        touch "$LAYOUT_DIR/$layout_name"
+        chmod +x "$LAYOUT_DIR/$layout_name"
+        ;;
+      "Delete layout")
+        chosen_layout="$(echo -e "$layouts\nBack\nExit" | menu_cmd)"
+        if [ "$chosen_layout" == "Exit" ] || [ -z "$chosen_layout" ]; then
+          exit
+        elif [ "$chosen_layout" == "Back" ]; then
+          layouts_menu
+        else
+          rm "$LAYOUT_DIR/$chosen_layout"
+        fi
+        ;;
+      "Save current state as layout")
+        # TODO: parse from xrandr --listactivemonitors
+        # TODO: menu prompt to choose how to save
+        ;;
+    esac
+  fi
+}
+
 monitors="$(xrandr | grep -hoPe "[a-zA-Z]+[0-9-]+ connected" | grep -hoPe "[a-zA-Z]+[0-9-]+")"
 monitors=($monitors)
 menu="Make primary"
@@ -78,27 +138,31 @@ menu+="\nBack"
 menu+="\nExit"
 
 while true; do
-  chosen_monitor=$(echo "${monitors[@]} Exit" | tr ' ' '\n' | menu_cmd)
-  if [ "$chosen_monitor" == "Exit" ]; then
+  chosen_monitor=$(echo "${monitors[@]} Layouts Exit" | tr ' ' '\n' | menu_cmd)
+  if [ "$chosen_monitor" == "Exit" ] || [ -z "$chosen_monitor" ]; then
     exit
   fi
 
-  chosen_menu=$(echo -e "${menu[@]}" | menu_cmd)
-  case "$chosen_menu" in
-    "Make primary")
-      xrandr --output "$chosen_monitor" --primary 
-      ;;
-    "Set resolution")
-      set_resolution "$chosen_monitor"
-      ;;
-    "Set position")
-      set_position "$chosen_monitor"
-      ;;
-    "Exit")
-      exit
-      ;;
-    "Back")
-      ;;
-  esac
-  refresh_wm
+  if [ "$chosen_monitor" == "Layouts" ]; then
+    layouts_menu
+  else
+    chosen_menu=$(echo -e "${menu[@]}" | menu_cmd)
+    case "$chosen_menu" in
+      "Make primary")
+        xrandr --output "$chosen_monitor" --primary 
+        ;;
+      "Set resolution")
+        set_resolution "$chosen_monitor"
+        ;;
+      "Set position")
+        set_position "$chosen_monitor"
+        ;;
+      "Back")
+        ;;
+      *)
+        exit
+        ;;
+    esac
+    refresh_wm
+  fi
 done
