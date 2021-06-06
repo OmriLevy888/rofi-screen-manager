@@ -4,7 +4,7 @@
 LAYOUT_DIR="$HOME/.screenlayout/"
 
 refresh_wm() {
-  herbstclient detect_monitors
+  herbstclient reload
 }
 
 menu_cmd() {
@@ -120,8 +120,49 @@ layouts_menu() {
         fi
         ;;
       "Save current state as layout")
-        # TODO: parse from xrandr --listactivemonitors
-        # TODO: menu prompt to choose how to save
+        echo "Saving current layout"
+
+        target_layout="$(echo -e "$layouts\nBack\nExit" | menu_cmd)"
+        if [ "$target_layout" == "Exit" ] || [ -z "$target_layout" ]; then
+          exit
+        elif [ "$target_layout" == "Back" ]; then
+          layouts_menu
+        else
+          command_output="xrandr"
+
+          i=0
+          for part in $(xrandr --listactivemonitors | tail -n +2); do
+            if (( i % 4 == 2 )); then
+              width="${part%%/*}"
+              height="${part%/*}"
+              height="${height#*x}"
+              mode_setting="$width"
+              mode_setting+="x"
+              mode_setting+="$height"
+              command_output+=" --mode $mode_setting"
+
+              pos="${part#*+}"
+              pos=$(echo "$pos" | tr + x)
+              command_output+=" --pos $pos"
+            elif (( i % 4 == 1 )); then
+              is_primary=0
+              name="${part:1}"
+              if [[ $(echo "$part" | grep -i '*') != "" ]]; then
+                is_primary=1
+                name="${part:2}"
+              fi
+
+              command_output+=" --output '$name'"
+              if [ $is_primary == 1 ]; then
+                command_output+=" --primary"
+              fi
+            fi
+            i=$((i + 1))
+          done
+
+          echo $target_layout
+          echo $command_output > "$LAYOUT_DIR/$target_layout"
+        fi
         ;;
     esac
   fi
@@ -138,12 +179,14 @@ menu+="\nBack"
 menu+="\nExit"
 
 while true; do
-  chosen_monitor=$(echo "${monitors[@]} Layouts Exit" | tr ' ' '\n' | menu_cmd)
+  chosen_monitor=$(echo "${monitors[@]} Default Layouts Exit" | tr ' ' '\n' | menu_cmd)
   if [ "$chosen_monitor" == "Exit" ] || [ -z "$chosen_monitor" ]; then
     exit
   fi
-
-  if [ "$chosen_monitor" == "Layouts" ]; then
+  
+  if [ "$chosen_monitor" == "Default" ]; then
+    xrandr --auto
+  elif [ "$chosen_monitor" == "Layouts" ]; then
     layouts_menu
   else
     chosen_menu=$(echo -e "${menu[@]}" | menu_cmd)
